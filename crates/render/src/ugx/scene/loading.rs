@@ -36,6 +36,7 @@ pub(super) struct SceneInputs<'input> {
 #[derive(Default)]
 pub(super) struct SceneAssets {
     pub(super) units: HashMap<String, Option<Arc<Unit>>>,
+    pub(super) asset_cache: UnitAssetCache,
     pub(super) lights: LightAssets,
     pub(super) particles: ParticleAssets,
     pub(super) terrain_effects: TerrainEffectAssets,
@@ -84,18 +85,9 @@ pub(super) fn load_placements(
     units: &mut HashMap<String, Option<Arc<Unit>>>,
 ) {
     let lookup = PlacementLookup::new(inputs);
-    let mut asset_cache = UnitAssetCache::default();
     let mut placements = Vec::new();
     for entity in simulation_visuals(inputs.world) {
-        if let Some(placement) = load_placement(
-            scene,
-            source,
-            inputs,
-            &lookup,
-            &entity,
-            units,
-            &mut asset_cache,
-        ) {
+        if let Some(placement) = load_placement(scene, source, inputs, &lookup, &entity, units) {
             placements.push(placement);
         }
     }
@@ -112,7 +104,6 @@ pub(super) fn sync_changed_placements(
     states: Vec<SimulationEntityState>,
 ) {
     let lookup = PlacementLookup::new(inputs);
-    let mut asset_cache = UnitAssetCache::default();
     // The aggregate counters and issues describe the last full build. A sync that
     // rebuilds single placements does not change them.
     let missing_proto_count = scene.missing_proto_count;
@@ -144,15 +135,8 @@ pub(super) fn sync_changed_placements(
             continue;
         }
         scene.animation_selections.remove(&entity.id);
-        if let Some(placement) = load_placement(
-            scene,
-            source,
-            inputs,
-            &lookup,
-            &entity,
-            &mut units,
-            &mut asset_cache,
-        ) {
+        if let Some(placement) = load_placement(scene, source, inputs, &lookup, &entity, &mut units)
+        {
             placements.push(placement);
         }
     }
@@ -186,7 +170,6 @@ fn load_placement(
     lookup: &PlacementLookup<'_>,
     entity: &SimulationVisual<'_>,
     units: &mut HashMap<String, Option<Arc<Unit>>>,
-    asset_cache: &mut UnitAssetCache,
 ) -> Option<UnitPlacement> {
     let proto_name = entity.proto_name.trim();
     if proto_name.is_empty() {
@@ -245,7 +228,7 @@ fn load_placement(
             movement_animation_roll,
             auxiliary_animations: &auxiliary_requests,
         },
-        asset_cache,
+        &mut scene.asset_cache,
         units,
     );
     let unit = match unit {

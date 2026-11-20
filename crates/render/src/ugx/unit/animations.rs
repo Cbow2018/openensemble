@@ -9,7 +9,7 @@ use pipeline::source::{AssetSource, StdFileProvider};
 use pipeline::uax::Reader as UaxReader;
 use pipeline::uax::types::Animation;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(super) struct AnimationAssetCache {
     animations: HashMap<String, Option<Arc<Animation>>>,
 }

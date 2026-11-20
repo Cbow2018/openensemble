@@ -56,7 +56,7 @@ struct UnitInstance {
     attachment: Option<InstanceAttachment>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(super) struct UnitAssetCache {
     models: HashMap<String, Arc<Model>>,
     animations: AnimationAssetCache,
@@ -333,6 +333,15 @@ impl Unit {
     /// Returns the visual model names in render order.
     pub fn component_names(&self) -> impl Iterator<Item = &str> {
         self.instances.iter().map(|instance| instance.name.as_str())
+    }
+
+    /// Returns the identity of each decoded model. The scene tests use it to check cache reuse.
+    #[cfg(test)]
+    pub(super) fn model_identities(&self) -> Vec<*const Model> {
+        self.instances
+            .iter()
+            .map(|instance| Arc::as_ptr(&instance.model))
+            .collect()
     }
 
     /// Returns every persistent and animation-triggered authored attachment.

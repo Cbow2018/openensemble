@@ -183,6 +183,7 @@ pub struct UnitScene {
     placements: Vec<UnitPlacement>,
     issues: Vec<UnitSceneIssue>,
     decoded_visuals: HashMap<String, Option<Arc<Unit>>>,
+    asset_cache: UnitAssetCache,
     light_assets: LightAssets,
     particle_assets: ParticleAssets,
     terrain_effect_assets: TerrainEffectAssets,
@@ -309,20 +310,18 @@ impl UnitScene {
             sync_changed_placements(self, source, inputs, states);
             return true;
         }
-        *self = Self::load_world_reusing(
-            source,
-            inputs,
-            SceneAssets {
-                units: self.decoded_visuals.clone(),
-                lights: self.light_assets.clone(),
-                particles: self.particle_assets.clone(),
-                terrain_effects: self.terrain_effect_assets.clone(),
-                terrain_impacts: self.terrain_impact_assets.clone(),
-                terrain_impact_issues: self.terrain_impact_issues.clone(),
-                impact_decals: self.impact_decal_assets.clone(),
-                impact_visuals: self.impact_visual_assets.clone(),
-            },
-        );
+        let assets = SceneAssets {
+            units: self.decoded_visuals.clone(),
+            asset_cache: std::mem::take(&mut self.asset_cache),
+            lights: self.light_assets.clone(),
+            particles: self.particle_assets.clone(),
+            terrain_effects: self.terrain_effect_assets.clone(),
+            terrain_impacts: self.terrain_impact_assets.clone(),
+            terrain_impact_issues: self.terrain_impact_issues.clone(),
+            impact_decals: self.impact_decal_assets.clone(),
+            impact_visuals: self.impact_visual_assets.clone(),
+        };
+        *self = Self::load_world_reusing(source, inputs, assets);
         true
     }
 
@@ -386,6 +385,7 @@ impl UnitScene {
             terrain_impact_issues: assets.terrain_impact_issues,
             impact_decal_assets: assets.impact_decals,
             impact_visual_assets: assets.impact_visuals,
+            asset_cache: assets.asset_cache,
             ..Self::default()
         };
         load_placements(&mut scene, source, inputs, &mut assets.units);

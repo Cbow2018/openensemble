@@ -434,6 +434,95 @@ fn scene_sync_rebuilds_only_the_changed_placement() {
     assert!(!scene.sync_world(&mut source, &world, &visuals, &proto_objects));
 }
 
+/// A sync that misses the unit cache must reuse the models the scene already decoded.
+///
+/// Run with:
+/// `OPENENSEMBLE_GAME_DIR=<HaloWarsDE> cargo test -p render --lib -- --ignored`
+#[test]
+#[ignore = "requires a local Halo Wars DE installation"]
+fn scene_sync_reuses_decoded_models_when_the_unit_cache_misses() {
+    let mut loaded = test_support::installed_scenario("blood_gulch");
+    let names = super::simulation_proto_names(&loaded.simulation.world).collect::<Vec<_>>();
+    loaded
+        .content
+        .load_visuals_for(&mut loaded.source, names.iter().copied());
+    let mut scene = super::UnitScene::load_world(
+        &mut loaded.source,
+        &loaded.simulation.world,
+        &loaded.content.visuals,
+        &loaded.content.database.objects,
+    );
+    let placement = scene
+        .placements()
+        .iter()
+        .find(|placement| {
+            loaded
+                .simulation
+                .world
+                .get_unit(placement.entity_id())
+                .is_some()
+                && placement.unit.component_count() > 0
+        })
+        .expect("Blood Gulch should place a decoded unit");
+    let entity_id = placement.entity_id();
+    let unit = Arc::as_ptr(&placement.unit);
+    let models = placement.unit.model_identities();
+
+    // The scripted animation is part of the unit cache key. The second sync must decode
+    // the unit again, but not its models.
+    assert!(loaded.simulation.world.play_entity_animation(
+        entity_id,
+        "Death".to_owned(),
+        None,
+        1_000
+    ));
+    assert!(scene.sync_world(
+        &mut loaded.source,
+        &loaded.simulation.world,
+        &loaded.content.visuals,
+        &loaded.content.database.objects,
+    ));
+    let placement = placement_of(&scene, entity_id);
+    assert_ne!(
+        unit,
+        Arc::as_ptr(&placement.unit),
+        "the second sync must decode the unit again"
+    );
+    assert_eq!(
+        models,
+        placement.unit.model_identities(),
+        "the second sync must reuse the decoded models"
+    );
+
+    // A roster change rebuilds the whole scene. The new scene must keep the cache.
+    assert!(loaded.simulation.world.play_entity_animation(
+        entity_id,
+        "Research".to_owned(),
+        None,
+        1_000
+    ));
+    loaded.simulation.world.create_unit(1);
+    assert!(scene.sync_world(
+        &mut loaded.source,
+        &loaded.simulation.world,
+        &loaded.content.visuals,
+        &loaded.content.database.objects,
+    ));
+    assert_eq!(
+        models,
+        placement_of(&scene, entity_id).unit.model_identities(),
+        "the rebuilt scene must reuse the decoded models"
+    );
+}
+
+fn placement_of(scene: &super::UnitScene, entity_id: sim::EntityId) -> &super::UnitPlacement {
+    scene
+        .placements()
+        .iter()
+        .find(|placement| placement.entity_id() == entity_id)
+        .expect("the entity should stay in the roster")
+}
+
 fn test_placement(entity_id: sim::EntityId, transform: Mat4) -> super::UnitPlacement {
     super::UnitPlacement {
         entity_id,
